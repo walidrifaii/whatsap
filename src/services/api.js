@@ -22,6 +22,7 @@ const getApiBase = () => {
 };
 
 const API_BASE = getApiBase();
+const FALLBACK_API_BASE = 'https://api-whats-2-r6be.onrender.com/api';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -38,7 +39,22 @@ api.interceptors.request.use((config) => {
 // Handle 401 globally
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
+  async (err) => {
+    const originalRequest = err.config || {};
+    const data = err.response?.data;
+    const isEdge404 =
+      err.response?.status === 404 &&
+      data?.error?.code === '404' &&
+      /page could not be found/i.test(data?.error?.message || '');
+
+    // Some deployments route API calls to the frontend host.
+    // Retry once against known backend API host as a safety net.
+    if (isEdge404 && !originalRequest.__retryWithFallbackBase) {
+      originalRequest.__retryWithFallbackBase = true;
+      originalRequest.baseURL = FALLBACK_API_BASE;
+      return api.request(originalRequest);
+    }
+
     if (err.response?.status === 401) {
       localStorage.removeItem('token');
       window.location.href = '/login';
