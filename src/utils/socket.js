@@ -17,8 +17,8 @@ const getDefaultSocketUrl = () => {
     return 'http://localhost:5000';
   }
 
-  // 4) Project default backend.
-  return 'https://api-whats-2-r6be.onrender.com';
+  // 4) Default to same-origin backend for deployed apps.
+  return window.location.origin;
 };
 
 export const getSocket = () => {

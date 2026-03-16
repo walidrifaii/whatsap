@@ -1,12 +1,24 @@
 import axios from 'axios';
 
-const API_BASE =
-  process.env.REACT_APP_API_URL ||
-  (window.location.hostname === 'localhost'
-    ? 'http://localhost:5000/api'
-    : 'https://api-whats-2-r6be.onrender.com/api');
+const getApiBase = () => {
+  // 1) Explicit API URL (recommended for separate frontend/backend deployments).
+  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL;
 
-const api = axios.create({ baseURL: API_BASE });
+  // 2) Local development.
+  if (window.location.hostname === 'localhost') {
+    return 'http://localhost:5000/api';
+  }
+
+  // 3) Default to same-origin backend for deployed apps behind one domain/reverse-proxy.
+  return `${window.location.origin}/api`;
+};
+
+const API_BASE = getApiBase();
+
+const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 20000
+});
 
 // Attach token to every request
 api.interceptors.request.use((config) => {
