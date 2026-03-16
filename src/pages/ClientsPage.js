@@ -14,6 +14,9 @@ export default function ClientsPage() {
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
   const [qrModal, setQrModal] = useState(null); // { clientId, qr }
+  const [dismissedQrKeys, setDismissedQrKeys] = useState({});
+
+  const getQrKey = (clientId, qr) => `${clientId}:${qr || ''}`;
 
   const load = useCallback(async () => {
     try {
@@ -28,25 +31,67 @@ export default function ClientsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Keep status/QR in sync while any client is connecting.
+  useEffect(() => {
+    const hasConnectingClients = clients.some((c) =>
+      ['initializing', 'qr_ready'].includes(c.status)
+    );
+    if (!hasConnectingClients) return;
+
+    const timer = setInterval(() => {
+      load();
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [clients, load]);
+
+  // If QR is available from API (e.g. missed socket event), show it.
+  useEffect(() => {
+    if (qrModal) return;
+    const qrClient = clients.find((c) => {
+      if (!(c.status === 'qr_ready' && c.qrCode)) return false;
+      const key = getQrKey(c.clientId, c.qrCode);
+      return !dismissedQrKeys[key];
+    });
+    if (qrClient) {
+      setQrModal({ clientId: qrClient.clientId, qr: qrClient.qrCode });
+    }
+  }, [clients, qrModal, dismissedQrKeys]);
+
   // Listen to socket events for all client IDs
   const allClientIds = clients.map(c => c.clientId);
 
-  useSocket(allClientIds[0], {
+  useSocket(allClientIds, {
     qr: ({ clientId, qr }) => {
-      setQrModal({ clientId, qr });
+      const key = getQrKey(clientId, qr);
+      if (!dismissedQrKeys[key]) {
+        setQrModal({ clientId, qr });
+      }
       setClients(prev => prev.map(c => c.clientId === clientId ? { ...c, status: 'qr_ready', qrCode: qr } : c));
     },
     ready: ({ clientId }) => {
       toast.success('WhatsApp connected!');
       setQrModal(null);
+      setDismissedQrKeys({});
       setClients(prev => prev.map(c => c.clientId === clientId ? { ...c, status: 'connected', qrCode: null } : c));
     },
     disconnected: ({ clientId }) => {
+      setDismissedQrKeys({});
       setClients(prev => prev.map(c => c.clientId === clientId ? { ...c, status: 'disconnected' } : c));
     },
     auth_failure: ({ clientId }) => {
       toast.error('WhatsApp auth failed for client');
+      setDismissedQrKeys({});
       setClients(prev => prev.map(c => c.clientId === clientId ? { ...c, status: 'auth_failure' } : c));
+    },
+    init_error: ({ clientId, message }) => {
+      toast.error(message || 'WhatsApp initialization failed');
+      setDismissedQrKeys({});
+      setClients((prev) =>
+        prev.map((c) =>
+          c.clientId === clientId ? { ...c, status: 'disconnected', qrCode: null } : c
+        )
+      );
     }
   });
 
@@ -71,6 +116,7 @@ export default function ClientsPage() {
       await connectClient(client._id);
       toast.info('Initializing WhatsApp... Watch for QR code');
       setClients(prev => prev.map(c => c._id === client._id ? { ...c, status: 'initializing' } : c));
+      setTimeout(() => load(), 2000);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Connection failed');
     }
@@ -184,7 +230,16 @@ export default function ClientsPage() {
             </p>
             <img src={qrModal.qr} alt="QR Code" style={{ width: 280, height: 280, border: '1px solid #eee', borderRadius: 8 }} />
             <div style={{ marginTop: 20 }}>
-              <button onClick={() => setQrModal(null)} style={btnGray}>Close</button>
+              <button
+                onClick={() => {
+                  const key = getQrKey(qrModal.clientId, qrModal.qr);
+                  setDismissedQrKeys((prev) => ({ ...prev, [key]: true }));
+                  setQrModal(null);
+                }}
+                style={btnGray}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

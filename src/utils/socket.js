@@ -12,41 +12,50 @@ const getDefaultSocketUrl = () => {
     return process.env.REACT_APP_API_URL.replace(/\/api\/?$/, '');
   }
 
-  // 3) Final fallback for deployed frontend.
-  if (typeof window !== 'undefined') return window.location.origin;
+  // 3) In local development, use local backend.
+  if (window.location.hostname === 'localhost') {
+    return 'http://localhost:5000';
+  }
 
-  return 'http://localhost:5000';
+  // 4) Project default backend.
+  return 'https://api-whats-2-r6be.onrender.com';
 };
 
 export const getSocket = () => {
   if (!socketInstance) {
     socketInstance = io(getDefaultSocketUrl(), {
-      transports: ['websocket'],
+      // Keep websocket preferred, but allow polling fallback on restrictive hosts/proxies.
+      transports: ['websocket', 'polling'],
       autoConnect: true
     });
   }
   return socketInstance;
 };
 
-export const useSocket = (clientId, handlers = {}) => {
+export const useSocket = (clientIdsOrSingle, handlers = {}) => {
   const socket = getSocket();
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
+  const ids = Array.isArray(clientIdsOrSingle)
+    ? clientIdsOrSingle.filter(Boolean)
+    : (clientIdsOrSingle ? [clientIdsOrSingle] : []);
 
   useEffect(() => {
-    if (!clientId) return;
+    if (ids.length === 0) return;
 
-    socket.emit('join-client-room', clientId);
+    ids.forEach((id) => socket.emit('join-client-room', id));
 
     const events = Object.keys(handlersRef.current);
+    const listeners = {};
     events.forEach((event) => {
-      socket.on(event, (data) => handlersRef.current[event]?.(data));
+      listeners[event] = (data) => handlersRef.current[event]?.(data);
+      socket.on(event, listeners[event]);
     });
 
     return () => {
-      events.forEach((event) => socket.off(event));
+      events.forEach((event) => socket.off(event, listeners[event]));
     };
-  }, [clientId, socket]);
+  }, [socket, ids.join('|')]);
 
   return socket;
 };
