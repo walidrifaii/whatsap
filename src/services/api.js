@@ -1,8 +1,16 @@
 import axios from 'axios';
 
+const normalizeApiBase = (url) => {
+  const trimmed = (url || '').replace(/\/+$/, '');
+  if (!trimmed) return '';
+  return /\/api$/i.test(trimmed) ? trimmed : `${trimmed}/api`;
+};
+
 const getApiBase = () => {
   // 1) Explicit API URL (recommended for separate frontend/backend deployments).
-  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL;
+  if (process.env.REACT_APP_API_URL) {
+    return normalizeApiBase(process.env.REACT_APP_API_URL);
+  }
 
   // 2) Local development.
   if (window.location.hostname === 'localhost') {
@@ -10,7 +18,7 @@ const getApiBase = () => {
   }
 
   // 3) Default to same-origin backend for deployed apps behind one domain/reverse-proxy.
-  return `${window.location.origin}/api`;
+  return normalizeApiBase(window.location.origin);
 };
 
 const API_BASE = getApiBase();
