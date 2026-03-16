@@ -17,13 +17,21 @@ export default function ClientsPage() {
   const [dismissedQrKeys, setDismissedQrKeys] = useState({});
 
   const getQrKey = (clientId, qr) => `${clientId}:${qr || ''}`;
+  const isGatewayOrNetworkIssue = (err) => {
+    const status = err?.response?.status;
+    return !err?.response || [502, 503, 504].includes(status);
+  };
 
   const load = useCallback(async () => {
     try {
       const { data } = await getClients();
       setClients(data.clients);
     } catch (e) {
-      toast.error('Failed to load clients');
+      if (isGatewayOrNetworkIssue(e)) {
+        toast.error('Backend is waking up. Try again in a few seconds.');
+      } else {
+        toast.error('Failed to load clients');
+      }
     } finally {
       setLoading(false);
     }
@@ -105,7 +113,11 @@ export default function ClientsPage() {
       setNewName('');
       toast.success('Client created!');
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to create client');
+      if (isGatewayOrNetworkIssue(err)) {
+        toast.error('Backend is waking up. Wait a few seconds, then create again.');
+      } else {
+        toast.error(err.response?.data?.error || 'Failed to create client');
+      }
     } finally {
       setCreating(false);
     }
