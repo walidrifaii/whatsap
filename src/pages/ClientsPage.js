@@ -100,6 +100,18 @@ export default function ClientsPage() {
           c.clientId === clientId ? { ...c, status: 'disconnected', qrCode: null } : c
         )
       );
+    },
+    init_retry: ({ clientId, attempt, maxAttempts, retryInMs, reason }) => {
+      const seconds = Math.max(1, Math.round((retryInMs || 0) / 1000));
+      toast.info(
+        `Connection retry ${attempt}/${maxAttempts} for ${clientId} in ${seconds}s` +
+        (reason ? ` (${reason})` : '')
+      );
+      setClients((prev) =>
+        prev.map((c) =>
+          c.clientId === clientId ? { ...c, status: 'initializing', qrCode: null } : c
+        )
+      );
     }
   });
 
